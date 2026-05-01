@@ -1,1 +1,94 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
+# 1. Loading the data
+trades_df = pd.read_csv('historical_data.csv')
+sentiment_df = pd.read_csv('fear_greed_index.csv')
+
+# Clean column names to remove any accidental leading/trailing spaces
+trades_df.columns = trades_df.columns.str.strip()
+sentiment_df.columns = sentiment_df.columns.str.strip()
+
+# 2. Formatting Dates
+trades_df['time_dt'] = pd.to_datetime(trades_df['Timestamp IST'], dayfirst=True)
+
+# Extracting just the date for merging 
+trades_df['merge_date'] = trades_df['time_dt'].dt.strftime('%Y-%m-%d')
+
+# Ensuring sentiment date is also in the same string format
+sentiment_df['merge_date'] = pd.to_datetime(sentiment_df['date']).dt.strftime('%Y-%m-%d')
+
+# 3. Merging Datasets
+df = pd.merge(trades_df, sentiment_df, on='merge_date', how='left')
+
+# 4. Cleaning Merged Data and mapping column names 
+df['Closed PnL'] = pd.to_numeric(df['Closed PnL'], errors='coerce')
+
+# Drop rows that are missing critical analysis data
+df.dropna(subset=['Closed PnL', 'classification'], inplace=True)
+
+# 5. Output Results
+print(f"Merge Complete! Final Dataset Size: {df.shape}")
+print("\nFirst 5 rows of merged data:")
+print(df[['Timestamp IST', 'Closed PnL', 'classification']].head())
+
+# Simple Visualization: Profit/Loss by Sentiment is as follows
+plt.figure(figsize=(10,6))
+sns.barplot(data=df, x='classification', y='Closed PnL', estimator=np.mean)
+plt.title('Average Closed PnL by Market Sentiment')
+plt.ylabel('Mean PnL')
+plt.xlabel('Sentiment Classification')
+plt.show()
+
+
+
+# Renaming columns to match your desired snippet names for consistency
+df_plot = df.rename(columns={'classification': 'Classification', 'Closed PnL': 'closedPnL'})
+
+# 1. Average PnL by Sentiment
+plt.figure(figsize=(10, 6))
+pnl_by_sentiment = df_plot.groupby('Classification')['closedPnL'].mean().reset_index()
+sns.barplot(data=pnl_by_sentiment, x='Classification', y='closedPnL', palette='viridis')
+plt.title('Average PnL by Market Sentiment')
+plt.show()
+
+# 2. Trade Activity is as follwos
+plt.figure(figsize=(10, 6))
+sns.boxplot(data=df_plot, x='Classification', y='Size USD', palette='magma')
+plt.yscale('log') # Log scale helps visualize the wide range of trade sizes
+plt.title('Trade Size (USD) Across Sentiment Regimes')
+plt.show()
+
+
+
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+from sklearn.preprocessing import LabelEncoder
+import pandas as pd
+import numpy as np
+
+# 1. Preparing categorical variables
+le = LabelEncoder()
+
+df['side_encoded'] = le.fit_transform(df['Side'])
+df['sentiment_encoded'] = le.fit_transform(df['classification'].astype(str))
+
+# 2. Defining Features and Target
+features = ['Execution Price', 'Size USD', 'side_encoded', 'sentiment_encoded']
+X = df[features]
+y = np.where(df['Closed PnL'] > 0, 1, 0) # 1 for win, 0 for loss
+
+# 3. Spliting and Training the data 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+clf = RandomForestClassifier(n_estimators=100, random_state=42)
+clf.fit(X_train, y_train)
+
+# 4. Results are as follows
+print(classification_report(y_test, clf.predict(X_test)))
+
+# 5. Visualizign the Importance
+feat_importances = pd.Series(clf.feature_importances_, index=features)
+feat_importances.sort_values().plot(kind='barh', title='Feature Importance')
