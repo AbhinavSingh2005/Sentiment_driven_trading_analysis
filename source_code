@@ -92,3 +92,4 @@ print(classification_report(y_test, clf.predict(X_test)))
 # 5. Visualizign the Importance
 feat_importances = pd.Series(clf.feature_importances_, index=features)
 feat_importances.sort_values().plot(kind='barh', title='Feature Importance')
+
